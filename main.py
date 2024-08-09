@@ -1,33 +1,52 @@
-from openai import OpenAI
+import os
 from dotenv import load_dotenv
-import base64
+import requests
+import json
 
-client = OpenAI()
+load_dotenv()  # Load environment variables from .env
 
-def get_calories_from_image(image_path):
-    with open(image_path, "rb") as image:
-        base64_image = base64.b64encode(image.read()).decode('utf-8')
+def get_calories(food_item):
+  nutritionix_app_id = os.getenv('NUTRITIONIX_APP_ID')
+  nutritionix_api_key = os.getenv('NUTRITIONIX_API_KEY')
 
+  headers = {
+    'x-app-id': nutritionix_app_id,
+    'x-app-key': nutritionix_api_key
+  }
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                    "type": "text",
-                    "text": "How many calories is in this meal?"
-                    },
-                    {
-                    "type": "image",
-                    "image": "data:image/jpg;base64," + base64_image
-                    }
-                ]
-            }  
-        ],
-    )
-    response_message = response.choices[0].message
-    content = response_message.content
+  url = 'https://api.nutritionix.com/v2/natural/nutrients'
 
-    return content
+  data = {
+    'query': food_item,
+    'locale': 'en_US'
+  }
+
+  response = requests.post(url, headers=headers, json=data)
+
+  if response.status_code == 200:
+    content = json.loads(response.content)
+    try:
+      calories = content['foods'][0]['nutrients'][0]['value']
+      return calories
+    except (IndexError, KeyError):
+      return None  # Handle cases where data is missing or incorrect
+  else:
+    return None  # Handle API errors
+
+def calorie_counter():
+  total_calories = 0
+  while True:
+    food = input("Enter a food (or 'quit' to exit): ").lower()
+    if food == 'quit':
+      break
+    calories = get_calories(food)
+    if calories:
+      total_calories += calories
+      print(f"{food} added. Total calories: {total_calories}")
+    else:
+      print("Food not found or error occurred.")
+
+  print("\nTotal calorie intake:", total_calories)
+
+if __name__ == "__main__":
+  calorie_counter()
